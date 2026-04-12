@@ -10,12 +10,9 @@ import os
 
 SVG_BACKDROP = """<svg width="480" height="360" xmlns="http://www.w3.org/2000/svg">
     <rect width="480" height="360" fill="#131314"/>
-    <!-- Header -->
     <rect width="480" height="50" fill="#1E1F20"/>
     <text x="240" y="33" font-family="sans-serif" font-size="22" fill="#E3E3E3" text-anchor="middle" font-weight="bold">✨ TurboWarp x Gemini</text>
-    <!-- Chat Area Background -->
     <rect x="20" y="60" width="440" height="235" rx="8" fill="#1E1F20"/>
-    <!-- Input Hint Area -->
     <rect x="20" y="305" width="440" height="45" rx="22.5" fill="#1E1F20" stroke="#333537" stroke-width="2"/>
     <text x="240" y="333" font-family="sans-serif" font-size="14" fill="#A8C7FA" text-anchor="middle">Start typing and press enter...</text>
 </svg>"""
@@ -67,8 +64,6 @@ class B:
         if not blks: return None
         for i in range(len(blks)-1):
             self.blocks[blks[i]]["next"] = blks[i+1]
-            self.blocks[blks[i+1]]["parent"] = blks[i]
-        self.blocks[blks[0]]["parent"] = parent
         self.blocks[blks[0]]["topLevel"] = top
         return blks[0]
 
@@ -110,16 +105,24 @@ class B:
     def gemini_getResponse(self): return self._blk("geminiAI_getResponse", {}, {})
     def gemini_isThinking(self): return self._blk("geminiAI_isThinking", {}, {})
 
+    def resolve_parents(self):
+        # Automatically connect "parent" fields to make the block tree valid!
+        for uid, blk in self.blocks.items():
+            if blk.get("next"):
+                self.blocks[blk["next"]]["parent"] = uid
+            for iname, ival in blk.get("inputs", {}).items():
+                if isinstance(ival, list) and len(ival) >= 2 and ival[0] in [2, 3]:
+                    target = ival[1]
+                    if isinstance(target, str) and target in self.blocks:
+                        self.blocks[target]["parent"] = uid
+
 # ---------------------------------------------------------
 # Build Function
 # ---------------------------------------------------------
 
 def build():
-    # Assets
     bd_md5, bd_b = md5_svg(SVG_BACKDROP)
     sp_md5, sp_b = md5_svg(SVG_SPARKLE)
-    
-    # IDs
     L_CHAT = "chat_history_list"
     
     b = B()
@@ -130,23 +133,17 @@ def build():
     init2 = b.gemini_setServer("https://web-production-82403.up.railway.app")
     init3 = b.gemini_setModel("gemini-2.0-flash")
     init4 = b.add_to_list(iS("System: こんにちは！下のバーから質問を入力してね。"), "ChatHistory", L_CHAT)
-    init5 = b.goto(15, 178) # Place star near the header "TurboWarp x Gemini"
+    init5 = b.goto(15, 178)
 
-    # Forever Ask Loop
     loop_ask = b.ask_wait(iS(""))
-    
-    # if length of answer > 0 (avoid empty inputs)
     answer_len = b.len_(iR(b.answer()))
     gt_0 = b.gt_(iR(answer_len), iN(0))
     
-    # Combine user string "You: " + answer
     user_str = b.join_(iS("You: "), iR(b.answer()))
     add_user = b.add_to_list(iR(user_str), "ChatHistory", L_CHAT)
     
-    # Ask extension
     ext_ask = b.gemini_ask(iR(b.answer()))
     
-    # Wait until not thinking (and animate)
     is_think = b.gemini_isThinking()
     not_think = b.not_(iB(is_think))
     spin = b.turn_right(10)
@@ -154,24 +151,27 @@ def build():
     
     reset_dir = b.point_dir(90)
     
-    # Add response
     gem_str = b.join_(iS("Gemini: "), iR(b.gemini_getResponse()))
     add_gem = b.add_to_list(iR(gem_str), "ChatHistory", L_CHAT)
     
-    # Construct sequence
+    # Assembly
     main_loop = b._chain([loop_ask, add_user, ext_ask, wait_anim, reset_dir, add_gem])
     forever = b.forever(main_loop)
     
     b._chain([start, init1, init2, init3, init4, init5, forever], top=True)
+    
+    # IMPORTANT: Resolve parents automatically for valid Scratch JSON formatting!
+    b.resolve_parents()
 
-    # Compile project JSON
     project = {
         "targets": [
             {
                 "isStage": True,
                 "name": "Stage",
                 "variables": {},
-                "lists": {},
+                "lists": {
+                    L_CHAT: ["ChatHistory", []]
+                },
                 "broadcasts": {},
                 "blocks": {},
                 "comments": {},
@@ -191,16 +191,13 @@ def build():
                 "layerOrder": 0,
                 "tempo": 60,
                 "videoTransparency": 50,
-                "videoState": "on",
-                "textToSpeechLanguage": None
+                "videoState": "on"
             },
             {
                 "isStage": False,
                 "name": "Gemini",
                 "variables": {},
-                "lists": {
-                    L_CHAT: ["ChatHistory", []]
-                },
+                "lists": {},
                 "broadcasts": {},
                 "blocks": b.blocks,
                 "comments": {},
@@ -233,7 +230,7 @@ def build():
                 "mode": "list",
                 "opcode": "data_listcontents",
                 "params": {"LIST": "ChatHistory"},
-                "spriteName": "Gemini",
+                "spriteName": None,
                 "value": [],
                 "width": 440,
                 "height": 235,
