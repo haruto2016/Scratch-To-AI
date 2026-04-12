@@ -34,7 +34,7 @@ cd scratch-gemini
 git init
 git add .
 git commit -m "Scratch Gemini AI Server"
-git remote add origin https://github.com/あなたのユーザー名/scratch-gemini.git
+git remote add origin https://github.com/あなたのユーザー名/Scratch-To-AI.git
 git push -u origin main
 ```
 
@@ -52,11 +52,14 @@ git push -u origin main
    | `SUPABASE_KEY` | Supabase の anon key |
    | `GEMINI_API_KEY` | Google AI Studio のAPIキー |
    | `GEMINI_MODEL` | `gemini-2.0-flash` |
+   | `SCRATCH_USERNAME` | あなたのScratchユーザー名 |
+   | `SCRATCH_PASSWORD` | あなたのScratchパスワード |
+   | `SCRATCH_PROJECT_ID`| メインとなるScratchプロジェクトのURL数字 |
 
 4. **Deploy** → しばらく待つとURLが発行される
    例: `https://scratch-gemini-production.up.railway.app`
 
-5. ブラウザでURLを開いて `{"status":"ok"...}` が表示されれば成功！
+5. Railway上でPythonサーバーが起動し、自動的にScratchと接続されます。
 
 ---
 

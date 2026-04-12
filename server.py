@@ -83,7 +83,7 @@ def scratch_bridge():
             print(f"BRIDGE: Connected OK (project={pid})", flush=True)
 
             try:
-                cloud.set_var("status", 0)
+                cloud.set_var("☁ status", 0)
             except Exception as e:
                 pass
 
@@ -91,23 +91,23 @@ def scratch_bridge():
 
             while True:
                 try:
-                    raw_status = cloud.get_var("status")
+                    raw_status = cloud.get_var("☁ status")
                     status = str(raw_status).split(".")[0].strip() if raw_status is not None else "0"
 
                     if status == "1":
                         # Read prompt parts
-                        raw_p1 = cloud.get_var("p1")
-                        raw_p2 = cloud.get_var("p2")
+                        raw_p1 = cloud.get_var("☁ p1")
+                        raw_p2 = cloud.get_var("☁ p2")
                         prompt_text = decode_prompt(raw_p1, raw_p2)
                         
-                        if not prompt_text or prompt_text == prev_prompt:
+                        if not prompt_text:
                             time.sleep(0.3)
                             continue
 
                         prev_prompt = prompt_text
                         print(f"BRIDGE: Got prompt: '{prompt_text[:80]}'", flush=True)
 
-                        cloud.set_var("status", 2)  # processing
+                        cloud.set_var("☁ status", 2)  # processing
                         print("BRIDGE: Status -> 2 (processing)", flush=True)
 
                         # Supabase logging
@@ -150,10 +150,10 @@ def scratch_bridge():
                         print(f"BRIDGE: Sending chunks...", flush=True)
                         
                         for i, chunk in enumerate(chunks):
-                            cloud.set_var(f"r{i+1}", chunk)
-                            time.sleep(0.12)  # rate limit compliance
+                            cloud.set_var(f"☁ r{i+1}", chunk)
+                            time.sleep(0.35)  # rate limit compliance
                             
-                        cloud.set_var("status", 3)  # done
+                        cloud.set_var("☁ status", 3)  # done
                         print(f"BRIDGE: Status -> 3 (done, {ms}ms)", flush=True)
 
                     time.sleep(0.5)
