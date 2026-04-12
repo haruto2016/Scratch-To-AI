@@ -1,8 +1,8 @@
 """
-Scratch x Gemini AI -- server
+Scratch x Gemini AI -- server (Unicode edition)
 Flask API + scratchattach cloud variable bridge + Supabase log
 """
-import os, time, threading, sys
+import os, time, threading
 from datetime import datetime
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -21,7 +21,6 @@ SUPABASE_KEY   = os.environ["SUPABASE_KEY"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 DEFAULT_MODEL  = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 TABLE          = "scratch_gemini"
-CHARSET = ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
 
 # -- init clients --
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -33,39 +32,29 @@ def get_model(name):
         _models[name] = genai.GenerativeModel(name)
     return _models[name]
 
-# -- encode/decode --
-def encode(text):
-    r = "1"
-    for ch in text:
-        r += str(CHARSET.index(ch) if ch in CHARSET else 0).zfill(2)
-    return r
-
-def decode(num_val):
-    s = str(num_val).split(".")[0].lstrip("-")
-    if len(s) < 2:
-        return ""
-    s = s[1:]  # skip leading "1"
-    result = []
-    for i in range(0, len(s) - 1, 2):
-        idx = int(s[i:i+2])
-        if 0 <= idx < len(CHARSET):
-            result.append(CHARSET[idx])
-    return "".join(result)
+# -- encode/decode (5-digit Unicode) --
+def decode_prompt(p1, p2):
+    raw = ""
+    if p1 and str(p1) != "0" and len(str(p1)) > 1: raw += str(p1).split(".")[0][1:]
+    if p2 and str(p2) != "0" and len(str(p2)) > 1: raw += str(p2).split(".")[0][1:]
+    
+    text = ""
+    for i in range(0, len(raw) - 4, 5):
+        code = int(raw[i:i+5])
+        if 1 <= code <= 65535:
+            text += chr(code)
+    return text
 
 def chunk_response(text):
-    # Only keep ASCII-representable chars, replace others with '?'
-    cleaned = ""
-    for ch in text[:345]:
-        if ch in CHARSET:
-            cleaned += ch
-        elif ch == '\n':
-            cleaned += ' '
-        else:
-            cleaned += '?'
-    body = "".join(str(CHARSET.index(c)).zfill(2) for c in cleaned)
+    digits = ""
+    for ch in text[:350]:  # up to 350 chars (7 vars * 50 chars)
+        code = ord(ch)
+        if code > 65535: code = 63  # Replace invalid with '?'
+        digits += f"{code:05d}"
+    
     chunks = []
-    for i in range(3):
-        piece = body[i*230:(i+1)*230]
+    for i in range(7):
+        piece = digits[i*250 : (i+1)*250]
         chunks.append(("1" + piece) if piece else "0")
     return chunks
 
@@ -93,38 +82,35 @@ def scratch_bridge():
             cloud = session.connect_cloud(pid)
             print(f"BRIDGE: Connected OK (project={pid})", flush=True)
 
-            # Reset status
             try:
                 cloud.set_var("status", 0)
             except Exception as e:
-                print(f"BRIDGE: Reset status failed: {e}", flush=True)
+                pass
 
             prev_prompt = None
 
             while True:
                 try:
-                    # Read status -- scratchattach uses var name WITHOUT the cloud symbol
                     raw_status = cloud.get_var("status")
                     status = str(raw_status).split(".")[0].strip() if raw_status is not None else "0"
 
                     if status == "1":
-                        # Read prompt
-                        raw_prompt = cloud.get_var("prompt")
-                        prompt_str = str(raw_prompt) if raw_prompt else ""
-
-                        if not prompt_str or prompt_str == "0" or prompt_str == prev_prompt:
+                        # Read prompt parts
+                        raw_p1 = cloud.get_var("p1")
+                        raw_p2 = cloud.get_var("p2")
+                        prompt_text = decode_prompt(raw_p1, raw_p2)
+                        
+                        if not prompt_text or prompt_text == prev_prompt:
                             time.sleep(0.3)
                             continue
 
-                        prev_prompt = prompt_str
-                        prompt_text = decode(prompt_str)
+                        prev_prompt = prompt_text
                         print(f"BRIDGE: Got prompt: '{prompt_text[:80]}'", flush=True)
 
-                        # Set status=2 (processing)
-                        cloud.set_var("status", 2)
+                        cloud.set_var("status", 2)  # processing
                         print("BRIDGE: Status -> 2 (processing)", flush=True)
 
-                        # Log to Supabase
+                        # Supabase logging
                         rec_id = None
                         try:
                             res = supabase.table(TABLE).insert({
@@ -143,13 +129,12 @@ def scratch_bridge():
                             db_status = "done"
                             print(f"BRIDGE: Gemini replied: '{reply[:80]}...'", flush=True)
                         except Exception as e:
-                            reply = f"Error: {e}"
+                            reply = f"AI Connection Error: {e}"
                             db_status = "error"
                             print(f"BRIDGE: Gemini error: {e}", flush=True)
 
                         ms = int((time.time() - t0) * 1000)
 
-                        # Update Supabase
                         if rec_id:
                             try:
                                 supabase.table(TABLE).update({
@@ -157,18 +142,17 @@ def scratch_bridge():
                                     "duration_ms": ms,
                                     "updated_at": datetime.utcnow().isoformat(),
                                 }).eq("id", rec_id).execute()
-                            except Exception as e:
-                                print(f"BRIDGE: DB update error: {e}", flush=True)
+                            except Exception:
+                                pass
 
                         # Send response chunks
-                        r1, r2, r3 = chunk_response(reply)
-                        print(f"BRIDGE: Sending chunks (lens: {len(r1)}, {len(r2)}, {len(r3)})", flush=True)
-                        cloud.set_var("resp1", r1)
-                        time.sleep(0.1)
-                        cloud.set_var("resp2", r2)
-                        time.sleep(0.1)
-                        cloud.set_var("resp3", r3)
-                        time.sleep(0.3)
+                        chunks = chunk_response(reply)
+                        print(f"BRIDGE: Sending chunks...", flush=True)
+                        
+                        for i, chunk in enumerate(chunks):
+                            cloud.set_var(f"r{i+1}", chunk)
+                            time.sleep(0.12)  # rate limit compliance
+                            
                         cloud.set_var("status", 3)  # done
                         print(f"BRIDGE: Status -> 3 (done, {ms}ms)", flush=True)
 
@@ -188,7 +172,7 @@ CORS(app)
 
 @app.route("/")
 def index():
-    return jsonify({"status": "ok", "message": "Scratch x Gemini AI running"})
+    return jsonify({"status": "ok", "message": "Scratch x Gemini AI (Unicode Edition)"})
 
 @app.route("/api/history")
 def history():
@@ -204,7 +188,6 @@ def history():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# -- start --
 threading.Thread(target=scratch_bridge, daemon=True).start()
 
 if __name__ == "__main__":
