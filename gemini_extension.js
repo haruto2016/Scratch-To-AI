@@ -44,7 +44,7 @@
       const data = await res.json();
       if (!res.ok) {
         _lastError = data.error || `サーバーエラー ${res.status}`;
-        _lastResp  = "";
+        _lastResp  = "⚠️ エラー: " + _lastError;
       } else {
         _lastResp   = data.response ?? "";
         _lastId     = data.id       ?? "";
@@ -53,7 +53,7 @@
       }
     } catch (e) {
       _lastError = `接続エラー: ${e.message}`;
-      _lastResp  = "";
+      _lastResp  = "⚠️ 通信失敗: " + _lastError;
     } finally {
       _isThinking = false;
     }
