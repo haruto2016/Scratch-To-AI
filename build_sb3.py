@@ -136,8 +136,6 @@ def build():
     init5 = b.goto(15, 178)
 
     loop_ask = b.ask_wait(iS(""))
-    answer_len = b.len_(iR(b.answer()))
-    gt_0 = b.gt_(iR(answer_len), iN(0))
     
     user_str = b.join_(iS("You: "), iR(b.answer()))
     add_user = b.add_to_list(iR(user_str), "ChatHistory", L_CHAT)
