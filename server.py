@@ -188,6 +188,55 @@ def history():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+from flask import request
+
+@app.route("/api/chat", methods=["POST"])
+def chat():
+    data = request.json or {}
+    prompt_text = data.get("prompt", "")
+    model_name = data.get("model", DEFAULT_MODEL)
+    session_id = data.get("session_id", "default")
+    
+    if not prompt_text:
+        return jsonify({"error": "Empty prompt"}), 400
+
+    rec_id = None
+    try:
+        res = supabase.table(TABLE).insert({
+            "prompt": prompt_text, "model": model_name,
+            "session_id": session_id, "status": "pending",
+            "created_at": datetime.utcnow().isoformat(),
+        }).execute()
+        rec_id = res.data[0]["id"]
+    except Exception as e:
+        print(f"API: DB insert error: {e}", flush=True)
+
+    t0 = time.time()
+    try:
+        reply = get_model(model_name).generate_content(prompt_text).text
+        db_status = "done"
+    except Exception as e:
+        reply = f"AI Connection Error: {e}"
+        db_status = "error"
+
+    ms = int((time.time() - t0) * 1000)
+
+    if rec_id:
+        try:
+            supabase.table(TABLE).update({
+                "response": reply, "status": db_status,
+                "duration_ms": ms,
+                "updated_at": datetime.utcnow().isoformat(),
+            }).eq("id", rec_id).execute()
+        except Exception:
+            pass
+
+    return jsonify({
+        "response": reply,
+        "id": rec_id,
+        "duration_ms": ms
+    })
+
 threading.Thread(target=scratch_bridge, daemon=True).start()
 
 if __name__ == "__main__":
