@@ -31,8 +31,8 @@ def md5_svg(svg_data):
 # Block Builder Utility
 # ---------------------------------------------------------
 
-def iN(num): return [4, [20, str(num)]]                 # Number
-def iP(num): return [4, [20, str(num)], [20, str(num)]] # Number (positive)
+def iN(num): return [1, [4, str(num)]]                 # Number
+def iP(num): return [1, [5, str(num)]]                 # Number (positive)
 def iS(txt): return [1, [10, str(txt)]]                 # String
 def iB(blk_id): return [2, blk_id]                      # Block (Boolean/Reporter)
 def iR(blk_id): return [3, blk_id, [10, ""]]            # Reporter with fallback
