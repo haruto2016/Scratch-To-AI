@@ -168,8 +168,8 @@ def scratch_bridge():
 
 # -- Flask --
 app = Flask(__name__)
-# Explicit CORS configuration to help with aggressive browsers
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+# Clean CORS configuration for cross-origin Scratch requests
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route("/")
 def index():
