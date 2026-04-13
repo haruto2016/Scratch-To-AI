@@ -168,11 +168,63 @@ def scratch_bridge():
 
 # -- Flask --
 app = Flask(__name__)
-CORS(app)
+# Explicit CORS configuration to help with aggressive browsers
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 @app.route("/")
 def index():
     return jsonify({"status": "ok", "message": "Scratch x Gemini AI (Unicode Edition)"})
+
+@app.route("/debug")
+def debug_page():
+    return """
+    <html>
+    <head><title>Gemini Scratch Debug</title>
+    <style>body{font-family:sans-serif;padding:20px;line-height:1.6;} .err{color:red;} .ok{color:green;}</style>
+    </head>
+    <body>
+    <h1>Gemini Scratch Connectivity Debug</h1>
+    <p>このページは、あなたのブラウザがサーバーと通信できるかテストするためのものです。</p>
+    <div id="results">Testing connection...</div>
+    <script>
+    async function runTest() {
+        const resDiv = document.getElementById('results');
+        try {
+            const t0 = Date.now();
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({prompt: 'Connected?'})
+            });
+            const ms = Date.now() - t0;
+            if(response.ok) {
+                const data = await response.json();
+                resDiv.innerHTML = `<h2 class="ok">✅ 接続成功！ (${ms}ms)</h2>
+                                    <p>APIは正しく応答しています。</p>
+                                    <p>もしScratchでエラーが出るなら、TurboWarpのセキュリティ設定や広告ブロック拡張機能が原因の可能性が高いです。</p>`;
+            } else {
+                resDiv.innerHTML = `<h2 class="err">❌ サーバーエラー: ${response.status}</h2>
+                                    <p>サーバー自体は動いていますが、APIがエラーを返しました。</p>`;
+            }
+        } catch (e) {
+            resDiv.innerHTML = `<h2 class="err">❌ 通信失敗 (Failed to fetch)</h2>
+                                <p>技術的詳細: <b>${e.message}</b></p>
+                                <p><b>原因の可能性:</b></p>
+                                <ul>
+                                    <li>ブラウザの広告ブロック（AdBlock / uBlock等）がこのURLをブロックしている</li>
+                                    <li>ブラウザのトラッキング防止機能が「AI」という単語を含むAPIを遮断している</li>
+                                    <li>ネットワーク（職場・学校のWi-Fiなど）で制限がかかっている</li>
+                                    <li>SSLハンドシェイク（Renegotiation）にブラウザが失敗している</li>
+                                </ul>
+                                <p>一度ブラウザの広告ブロックをオフにして、再度このページをリロードしてみてください。</p>`;
+        }
+    }
+    runTest();
+    </script>
+    </body>
+    </html>
+    """
+
 
 @app.route("/api/history")
 def history():
