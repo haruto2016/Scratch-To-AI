@@ -19,6 +19,7 @@
   let _isThinking  = false;
   let _lastId      = "";
   let _durationMs  = 0;
+  let _history     = []; // Array of {prompt, response}
 
   const MODELS = [
     "gemini-2.0-flash",
@@ -52,8 +53,27 @@
         _lastError  = "";
       }
     } catch (e) {
-      _lastError = `接続エラー: ${e.message}`;
-      _lastResp  = "⚠️ 通信失敗: " + _lastError;
+      _lastError = `[Fetch Error] ${e.message}. ブラウザやネットワーク（広告ブロック等）が ${ _serverUrl } への接続を遮断していないか確認してください。`;
+      _lastResp  = "⚠️ 接続失敗: " + _lastError;
+      console.error("Gemini Fetch Error:", e);
+    } finally {
+      _isThinking = false;
+    }
+  }
+
+  async function fetchHistory() {
+    _isThinking = true;
+    try {
+      const res = await fetch(`${_serverUrl}/api/history`);
+      const data = await res.json();
+      if (data.history) {
+        _history = data.history.map(item => ({
+          prompt:   item.prompt,
+          response: item.response
+        }));
+      }
+    } catch (e) {
+      console.error("History fetch failed", e);
     } finally {
       _isThinking = false;
     }
@@ -128,6 +148,32 @@
             blockType: Scratch.BlockType.REPORTER,
             text:      "セッションID",
           },
+          {
+            opcode:    "fetchHistory",
+            blockType: Scratch.BlockType.COMMAND,
+            text:      "会話履歴を取得する",
+          },
+          {
+            opcode:    "historySize",
+            blockType: Scratch.BlockType.REPORTER,
+            text:      "履歴の件数",
+          },
+          {
+            opcode:    "getHistoryPrompt",
+            blockType: Scratch.BlockType.REPORTER,
+            text:      "履歴 [INDEX] の自分の質問",
+            arguments: {
+              INDEX: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+            },
+          },
+          {
+            opcode:    "getHistoryResponse",
+            blockType: Scratch.BlockType.REPORTER,
+            text:      "履歴 [INDEX] のGeminiの回答",
+            arguments: {
+              INDEX: { type: Scratch.ArgumentType.NUMBER, defaultValue: 1 },
+            },
+          },
         ],
         menus: {
           modelMenu: {
@@ -141,6 +187,16 @@
     setServer({ URL }) { _serverUrl = String(URL).replace(/\/$/, ""); }
     setModel({ MODEL }) { _model = MODEL; }
     async ask({ PROMPT }) { await askGemini(String(PROMPT)); }
+    async fetchHistory() { await fetchHistory(); }
+    historySize() { return _history.length; }
+    getHistoryPrompt({ INDEX }) {
+      const idx = Math.floor(INDEX) - 1;
+      return _history[idx] ? _history[idx].prompt : "";
+    }
+    getHistoryResponse({ INDEX }) {
+      const idx = Math.floor(INDEX) - 1;
+      return _history[idx] ? _history[idx].response : "";
+    }
     getResponse()  { return _lastResp; }
     getError()     { return _lastError; }
     isThinking()   { return _isThinking; }
